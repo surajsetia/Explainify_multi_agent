@@ -592,8 +592,8 @@ if st.session_state.running and not st.session_state.done:
     # ── Step 3: Writer ──
     with st.spinner("✍️  Writer is drafting the report…"):
         research_combined = (
-            f"SEARCH RESULTS:\n{results['search']}\n\n"
-            f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
+            f"SEARCH RESULTS:\n{results['search'][:1000]}\n\n"
+            f"DETAILED SCRAPED CONTENT:\n{results['reader'][:1500]}"
         )
         results["writer"] = writer_chain.invoke({
             "topic": topic_val,
