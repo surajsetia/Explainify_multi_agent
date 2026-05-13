@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 from agents import build_reader_agent, build_search_agent, writer_chain, critic_chain
+from groq import RateLimitError
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -563,55 +564,116 @@ if run_btn:
         st.rerun()
 
 if st.session_state.running and not st.session_state.done:
+
     results = {}
     topic_val = st.session_state.topic_input
 
     # ── Step 1: Search ──
-    with st.spinner("🔍  Search Agent is working…"):
-        search_agent = build_search_agent()
-        sr = search_agent.invoke({
-            "messages": [("user", f"Find recent, reliable and detailed information about: {topic_val}")]
-        })
-        results["search"] = sr["messages"][-1].content
-        st.session_state.results = dict(results)
-    st.rerun() if False else None   # keep inline for now
+    try:
+        with st.spinner("🔍 Search Agent is working…"):
+
+            search_agent = build_search_agent()
+
+            sr = search_agent.invoke({
+                "messages": [
+                    ("user",
+                     f"Find recent, reliable and detailed information about: {topic_val}")
+                ]
+            })
+
+            results["search"] = sr["messages"][-1].content
+
+            st.session_state.results = dict(results)
+
+    except RateLimitError:
+        st.error("⚠️ Groq API rate limit exceeded. Please wait and try again.")
+        st.session_state.running = False
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Search Agent Error: {str(e)}")
+        st.session_state.running = False
+        st.stop()
 
     # ── Step 2: Reader ──
-    with st.spinner("📄  Reader Agent is scraping top resources…"):
-        reader_agent = build_reader_agent()
-        rr = reader_agent.invoke({
-            "messages": [("user",
-                          f"Based on the following search results about '{topic_val}', "
-                          f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                          f"Search Results:\n{results['search'][:800]}"
-                          )]
-        })
-        results["reader"] = rr["messages"][-1].content
-        st.session_state.results = dict(results)
+    try:
+        with st.spinner("📄 Reader Agent is scraping resources…"):
+
+            reader_agent = build_reader_agent()
+
+            rr = reader_agent.invoke({
+                "messages": [(
+                    "user",
+                    f"Based on the following search results about '{topic_val}', "
+                    f"pick the most relevant URL and scrape it.\n\n"
+                    f"Search Results:\n{results['search'][:500]}"
+                )]
+            })
+
+            results["reader"] = rr["messages"][-1].content
+
+            st.session_state.results = dict(results)
+
+    except RateLimitError:
+        st.error("⚠️ Groq API rate limit exceeded during reading.")
+        st.session_state.running = False
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Reader Agent Error: {str(e)}")
+        st.session_state.running = False
+        st.stop()
 
     # ── Step 3: Writer ──
-    with st.spinner("✍️  Writer is drafting the report…"):
-        research_combined = (
-            f"SEARCH RESULTS:\n{results['search'][:1000]}\n\n"
-            f"DETAILED SCRAPED CONTENT:\n{results['reader'][:1500]}"
-        )
-        results["writer"] = writer_chain.invoke({
-            "topic": topic_val,
-            "research": research_combined
-        })
-        st.session_state.results = dict(results)
+    try:
+        with st.spinner("✍️ Writer is drafting the report…"):
+
+            research_combined = (
+                f"SEARCH RESULTS:\n{results['search'][:1000]}\n\n"
+                f"DETAILED SCRAPED CONTENT:\n{results['reader'][:1200]}"
+            )
+
+            results["writer"] = writer_chain.invoke({
+                "topic": topic_val,
+                "research": research_combined
+            })
+
+            st.session_state.results = dict(results)
+
+    except RateLimitError:
+        st.error("⚠️ Groq API rate limit exceeded during writing.")
+        st.session_state.running = False
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Writer Error: {str(e)}")
+        st.session_state.running = False
+        st.stop()
 
     # ── Step 4: Critic ──
-    with st.spinner("🧐  Critic is reviewing the report…"):
-        results["critic"] = critic_chain.invoke({
-            "report": results["writer"]
-        })
-        st.session_state.results = dict(results)
+    try:
+        with st.spinner("🧐 Critic is reviewing the report…"):
+
+            results["critic"] = critic_chain.invoke({
+                "report": results["writer"][:3000]
+            })
+
+            st.session_state.results = dict(results)
+
+    except RateLimitError:
+        st.error("⚠️ Groq API rate limit exceeded during review.")
+        st.session_state.running = False
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Critic Error: {str(e)}")
+        st.session_state.running = False
+        st.stop()
 
     st.session_state.running = False
     st.session_state.done = True
-    st.rerun()
 
+    st.rerun()
 
 # ── Results display ───────────────────────────────────────────────────────────
 r = st.session_state.results
