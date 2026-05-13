@@ -39,12 +39,19 @@ def web_search(query: str) -> str:
             )
 
         return "\n----\n".join(out)
-
     except ConnectionError:
         return "Tavily connection failed. Please check internet/API status."
 
     except Timeout:
         return "Tavily request timed out. Please try again."
+
+    except Exception as e:
+
+        if "rate limit" in str(e).lower():
+            return "Tavily API rate limit exceeded."
+
+        if "quota" in str(e).lower():
+            return "Tavily API quota exceeded."
 
         return f"Search Error: {str(e)}"
 
