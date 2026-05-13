@@ -3,7 +3,6 @@ import requests
 from bs4 import BeautifulSoup
 from tavily import TavilyClient
 from requests.exceptions import ConnectionError, Timeout
-from tavily.errors import TavilyException
 
 import os
 from dotenv import load_dotenv
@@ -47,11 +46,8 @@ def web_search(query: str) -> str:
     except Timeout:
         return "Tavily request timed out. Please try again."
 
-    except TavilyException as e:
-        return f"Tavily Error: {str(e)}"
-
-    except Exception as e:
         return f"Search Error: {str(e)}"
+
 
 
 @tool
